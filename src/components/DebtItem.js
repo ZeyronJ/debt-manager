@@ -10,7 +10,7 @@ const DebtItem = ({ debt, deleteDebt }) => {
         navigation.navigate('Debtor', { id: debt.id, debtor: debt.debtor });
       }}
       onLongPress={() => deleteDebt(debt.id)}
-      delayLongPress={1200}
+      delayLongPress={1000}
     >
       <Text className='text-white w-1/2 font-extrabold text-lg'>
         {debt.debtor}

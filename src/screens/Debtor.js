@@ -1,30 +1,44 @@
-import { Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Image,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  Button,
+} from 'react-native';
 import Layout from '../components/Layout';
 import Boton from '../components/Boton';
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as SQLite from 'expo-sqlite';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { Audio } from 'expo-av';
 
 const Debtor = ({ navigation, route }) => {
-  const db = SQLite.openDatabase('example.db');
+  const db = SQLite.openDatabase('debts.db');
 
   const [debt, setDebt] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const [uri, setUri] = useState(null);
-  const [newPath, setNewPath] = useState(null);
+  const [imageUri, setImageUri] = useState(null);
+  const [newImagePath, setNewImagePath] = useState(null);
+
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
+      console.log('route.params.id:', route.params.id);
       db.transaction((tx) => {
         tx.executeSql(
           'SELECT * FROM debts WHERE id = ?',
           [route.params.id],
           (txObj, resultSet) => {
-            console.log(resultSet.rows._array);
             setDebt(resultSet.rows._array[0]);
+            if (resultSet.rows._array[0].image) {
+              setNewImagePath(resultSet.rows._array[0].image);
+            }
             setIsLoading(false);
           }
         ),
@@ -53,69 +67,85 @@ const Debtor = ({ navigation, route }) => {
         quality: 1,
       });
 
-      console.log(ImagePicker.MediaTypeOptions);
-
-      // console.log(result);;;; da error xddd
-      // {"assets": [{"assetId": null, "base64": null, "duration": null, "exif": null, "height": 421, "rotation": null,
-      // "type": "image", "uri": "file:///data/user/0/host.exp.exponent/cache/ExperienceData/%2540zeyron%252Fdebtmanager/ImagePicker/fe1c8ecf-e1f6-4956-91f2-f32326840141.jpeg",
-      // "width": 562}], "canceled": false, "cancelled": false}
+      // console.log(ImagePicker.MediaTypeOptions);
 
       if (result.canceled) {
         console.log('Selección de imagen cancelada.');
         return; // Salir de la función si la selección se cancela
       }
 
-      setUri(result.assets[0].uri);
+      setImageUri(result.assets[0].uri);
       let imageName = `${route.params.id}.jpg`;
-      setNewPath(`${FileSystem.documentDirectory}${imageName}`);
+      setNewImagePath(`${FileSystem.documentDirectory}${imageName}`);
       setDebt({ ...debt, image: result.assets[0].uri });
     } catch (error) {
       console.log('Error al seleccionar la imagen:', error);
     }
   };
 
-  const updateDebt = async (debt) => {
-    console.log('GUARDANDO');
-    if (newPath == null) {
-      db.transaction((tx) => {
-        tx.executeSql(
-          'UPDATE debts SET amount = ?, audio = ?, description = ?, thing = ? WHERE id = ?',
-          [debt.amount, null, debt.description, debt.thing, route.params.id],
-          (txObj, resultSet) => {
-            console.log(uri, newPath);
-          },
-          (txObj, error) => console.log(error)
-        );
+  const updateDebt = async () => {
+    // Copia la imagen a la carpeta de documentos de la app
+    if (imageUri != null && newImagePath != null) {
+      await FileSystem.moveAsync({
+        from: imageUri,
+        to: newImagePath,
       });
-    } else {
-      db.transaction((tx) => {
-        tx.executeSql(
-          'UPDATE debts SET amount = ?, audio = ?, description = ?, image = ?, thing = ? WHERE id = ?',
-          [
-            debt.amount,
-            null,
-            debt.description,
-            newPath,
-            debt.thing,
-            route.params.id,
-          ],
-          (txObj, resultSet) => {
-            console.log(uri, newPath);
-          },
-          (txObj, error) => console.log(error)
-        );
-      });
+      console.log('archivo guardado');
     }
 
-    // Move the image to the document directory
-    if (uri != null && newPath != null) {
-      await FileSystem.moveAsync({
-        from: uri,
-        to: newPath,
-      });
-    }
-    console.log('GUARDANDO FIN');
+    db.transaction((tx) => {
+      tx.executeSql(
+        'UPDATE debts SET amount = ?, audio = ?, description = ?, image = ?, thing = ? WHERE id = ?',
+        [
+          debt.amount,
+          null,
+          debt.description,
+          newImagePath ? newImagePath : null,
+          debt.thing,
+          route.params.id,
+        ],
+        (txObj, resultSet) => {
+          navigation.navigate('Home');
+        },
+        (txObj, error) => console.log(error)
+      );
+    });
   };
+
+  async function startRecording() {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status === 'granted') {
+        const newRecording = new Audio.Recording();
+        await newRecording.prepareToRecordAsync(
+          Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
+        );
+        setIsRecording(true);
+        await newRecording.startAsync(); // grabando audio
+        setRecording(newRecording);
+      } else {
+        console.log('Permission to access audio denied');
+      }
+    } catch (error) {
+      console.error('Failed to start recording', error);
+    }
+  }
+
+  async function stopRecording() {
+    if (recording) {
+      await recording.stopAndUnloadAsync();
+      setIsRecording(false);
+    }
+  }
+
+  async function playRecording() {
+    if (recording) {
+      const { sound, status } = await recording.createNewLoadedSoundAsync();
+      if (status.isLoaded) {
+        await sound.playAsync();
+      }
+    }
+  }
 
   return (
     <Layout>
@@ -154,18 +184,17 @@ const Debtor = ({ navigation, route }) => {
         </View>
         {!debt.audio && (
           <View className='w-1/2 flex-1 items-center justify-center'>
-            <Boton
-              text='Subir audio'
+            <Button
+              title={isRecording ? 'Parar Audio' : 'Grabar Audio'}
               color='hsl(0,0%,30%)'
-              onPress={() => {
-                console.log('audioooo');
-              }}
+              onPress={isRecording ? stopRecording : startRecording}
             />
+            <Button title={'Play'} onPress={playRecording} />
           </View>
         )}
         {debt.audio && (
           <View className='w-1/2'>
-            <Text className='text-white mx-auto'>AUDIO</Text>
+            <Button title={'Play'} onPress={playRecording} />
           </View>
         )}
       </View>
@@ -211,8 +240,7 @@ const Debtor = ({ navigation, route }) => {
       <TouchableOpacity
         className='bg-green-700 rounded-lg py-2 px-12 mt-3'
         onPress={() => {
-          updateDebt(debt);
-          navigation.navigate('Home');
+          updateDebt();
         }}
       >
         <Text className='text-white text-lg font-semibold'>Guardar</Text>

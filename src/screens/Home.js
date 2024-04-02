@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, version } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import Layout from '../components/Layout';
 import { TextInput, Text } from 'react-native';
 import Boton from '../components/Boton';
 import DebtList from '../components/DebtList';
 import * as SQLite from 'expo-sqlite';
+import * as FileSystem from 'expo-file-system';
 
 const Home = ({ navigation }) => {
-  const db = SQLite.openDatabase('example.db');
+  const db = SQLite.openDatabase('debts.db');
   const [isLoading, setIsLoading] = useState(true);
 
   const [deudor, setDeudor] = useState('');
@@ -84,6 +85,23 @@ const Home = ({ navigation }) => {
   };
   const deleteDebt = (id) => {
     db.transaction((tx) => {
+      // Eliminar archivos de audio e imagen
+      tx.executeSql(
+        'SELECT * FROM debts WHERE id = ?',
+        [id],
+        async (txObj, resultSet) => {
+          const debt = resultSet.rows._array[0];
+          if (debt.audio) {
+            await FileSystem.deleteAsync(debt.audio);
+            console.log('Audio eliminado:', debt.audio);
+          }
+          if (debt.image) {
+            await FileSystem.deleteAsync(debt.image);
+            console.log('Imagen eliminada:', debt.image);
+          }
+        },
+        (txObj, error) => console.log(error)
+      );
       tx.executeSql(
         'DELETE FROM debts WHERE id = ?',
         [id],
@@ -91,6 +109,7 @@ const Home = ({ navigation }) => {
           if (resultSet.rowsAffected > 0) {
             setDebts([...debts].filter((debt) => debt.id != id));
           }
+          console.log('Deuda eliminada:', id);
         },
         (txObj, error) => console.log(error)
       );
