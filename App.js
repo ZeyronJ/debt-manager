@@ -5,6 +5,7 @@ import Home from './src/screens/Home';
 import Debtor from './src/screens/Debtor';
 
 const Stack = createNativeStackNavigator();
+
 const App = () => {
   return (
     <>
@@ -13,16 +14,28 @@ const App = () => {
         <Stack.Navigator
           screenOptions={{
             animation: 'none',
+            headerStyle: {
+              backgroundColor: 'white', // Cambia el color del fondo del encabezado
+            },
+            headerTintColor: 'hsl(0,0%,25%)', // Cambia el color del texto del encabezado
+            headerTitleStyle: {
+              fontWeight: 'bold', // Cambia el estilo del texto del encabezado
+            },
+            headerTitleAlign: 'center', // Centra el texto del encabezado
           }}
         >
-          <Stack.Screen name='Home' component={Home}></Stack.Screen>
+          <Stack.Screen
+            name='Home'
+            component={Home}
+            options={{ title: '' }} // Cambia el título del encabezado
+          />
           <Stack.Screen
             name='Debtor'
             component={Debtor}
             options={({ route }) => ({
               title: route.params?.debtor,
             })}
-          ></Stack.Screen>
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </>
@@ -30,12 +43,3 @@ const App = () => {
 };
 
 export default App;
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     backgroundColor: "#fff",
-//     alignItems: "center",
-//     justifyContent: "center",
-//   },
-// });

@@ -119,24 +119,24 @@ const Home = ({ navigation }) => {
   return (
     <Layout>
       <TextInput
-        className='text-white mt-4 p-1 w-20'
+        className='mt-4 px-1 w-20 border-b border-b-neutral-400'
         placeholder='Deudor'
         placeholderTextColor='gray'
-        selectionColor={'white'}
+        selectionColor={'black'}
         onChangeText={(text) => setDeudor(text)}
         value={deudor}
       />
       <TextInput
-        className='text-white p-1  w-20'
+        className='px-1 w-20 border-b my-2 border-b-neutral-400'
         placeholder='Monto'
         placeholderTextColor='gray'
-        selectionColor={'white'}
+        selectionColor={'black'}
         onChangeText={(text) => setMonto(text)}
         value={monto.toString()}
         keyboardType='numeric'
       />
       <Boton
-        color={'hsl(240,100%,50%)'}
+        color={'hsl(210,80%,50%)'}
         text={'Agregar deuda'}
         onPress={() => createDebt()}
       />

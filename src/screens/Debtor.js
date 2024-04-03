@@ -21,8 +21,8 @@ const Debtor = ({ navigation, route }) => {
   const [debt, setDebt] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const [imageUri, setImageUri] = useState(null);
   const [newImagePath, setNewImagePath] = useState(null);
+  const [newAudioPath, setNewAudioPath] = useState(null);
 
   const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -38,6 +38,9 @@ const Debtor = ({ navigation, route }) => {
             setDebt(resultSet.rows._array[0]);
             if (resultSet.rows._array[0].image) {
               setNewImagePath(resultSet.rows._array[0].image);
+            }
+            if (resultSet.rows._array[0].audio) {
+              setNewAudioPath(resultSet.rows._array[0].audio);
             }
             setIsLoading(false);
           }
@@ -74,7 +77,6 @@ const Debtor = ({ navigation, route }) => {
         return; // Salir de la función si la selección se cancela
       }
 
-      setImageUri(result.assets[0].uri);
       let imageName = `${route.params.id}.jpg`;
       setNewImagePath(`${FileSystem.documentDirectory}${imageName}`);
       setDebt({ ...debt, image: result.assets[0].uri });
@@ -85,23 +87,32 @@ const Debtor = ({ navigation, route }) => {
 
   const updateDebt = async () => {
     // Copia la imagen a la carpeta de documentos de la app
-    if (imageUri != null && newImagePath != null) {
+    if (debt.image != null && newImagePath != null) {
       await FileSystem.moveAsync({
-        from: imageUri,
+        from: debt.image,
         to: newImagePath,
       });
-      console.log('archivo guardado');
+      console.log('imagen guardada');
+    }
+    // Copia el audio a la carpeta de documentos de la app
+    if (debt.audio != null && newAudioPath != null) {
+      await FileSystem.moveAsync({
+        from: debt.audio,
+        to: newAudioPath,
+      });
+      console.log('audio guardado');
     }
 
     db.transaction((tx) => {
       tx.executeSql(
-        'UPDATE debts SET amount = ?, audio = ?, description = ?, image = ?, thing = ? WHERE id = ?',
+        'UPDATE debts SET amount = ?, audio = ?, description = ?, image = ?, thing = ?, created_at = ? WHERE id = ?',
         [
           debt.amount,
-          null,
+          debt.audio ? newAudioPath : null,
           debt.description,
           newImagePath ? newImagePath : null,
           debt.thing,
+          debt.created_at,
           route.params.id,
         ],
         (txObj, resultSet) => {
@@ -122,7 +133,7 @@ const Debtor = ({ navigation, route }) => {
         );
         setIsRecording(true);
         await newRecording.startAsync(); // grabando audio
-        setRecording(newRecording);
+        setRecording(newRecording); // guardando el objeto de grabación
       } else {
         console.log('Permission to access audio denied');
       }
@@ -135,16 +146,30 @@ const Debtor = ({ navigation, route }) => {
     if (recording) {
       await recording.stopAndUnloadAsync();
       setIsRecording(false);
+
+      // Guardar el archivo de audio en una dirección específica
+      const audioName = `${route.params.id}.aac`;
+      setNewAudioPath(`${FileSystem.documentDirectory}${audioName}`);
+      setDebt({ ...debt, audio: recording.getURI() });
     }
   }
 
   async function playRecording() {
-    if (recording) {
-      const { sound, status } = await recording.createNewLoadedSoundAsync();
-      if (status.isLoaded) {
-        await sound.playAsync();
-      }
+    if (!debt.audio) {
+      return;
     }
+    const { sound, status } = await Audio.Sound.createAsync({
+      uri: debt.audio,
+    });
+    if (status.isLoaded) {
+      await sound.playAsync();
+    }
+    // if (recording) {
+    //   const { sound, status } = await recording.createNewLoadedSoundAsync();
+    //   if (status.isLoaded) {
+    //     await sound.playAsync();
+    //   }
+    // }
   }
 
   return (
@@ -152,62 +177,58 @@ const Debtor = ({ navigation, route }) => {
       <View className='flex flex-row w-full'>
         <View className='w-1/2'>
           <TextInput
-            className='text-white mt-4 p-1 w-28 mx-auto'
+            className='mt-4 px-1 w-28 mx-auto border-b border-neutral-400 font-medium'
             placeholder='Monto'
-            placeholderTextColor='gray'
-            selectionColor={'white'}
+            selectionColor={'black'}
             onChangeText={(text) => setDebt({ ...debt, amount: text })}
             value={debt.amount.toString()}
             keyboardType='numeric'
           />
           <TextInput
-            className='text-white mt-1 p-1 w-28 mx-auto'
+            className='mt-2 px-1 w-28 mx-auto border-b border-neutral-400 font-medium'
             placeholder='Cosa'
-            placeholderTextColor='gray'
-            selectionColor={'white'}
+            placeholderTextColor={'hsl(0,0%,65%)'}
+            selectionColor={'black'}
             onChangeText={(text) => setDebt({ ...debt, thing: text })}
-            value={debt.thing}
-            onTouchStart={() => {
-              if (debt.thing == 'No especificado') {
-                setDebt({ ...debt, thing: '' });
-              }
-            }}
+            value={debt.thing !== 'No especificado' ? debt.thing : ''}
           />
           <TextInput
-            className='text-white mt-1 p-1 w-28 mx-auto'
+            className='my-2 px-1 w-28 mx-auto border-b border-neutral-400 font-medium'
             placeholder='Fecha'
-            placeholderTextColor='gray'
-            selectionColor={'white'}
+            selectionColor={'black'}
             onChangeText={(text) => setDebt({ ...debt, created_at: text })}
             value={debt.created_at}
           />
         </View>
         {!debt.audio && (
           <View className='w-1/2 flex-1 items-center justify-center'>
-            <Button
-              title={isRecording ? 'Parar Audio' : 'Grabar Audio'}
-              color='hsl(0,0%,30%)'
+            <Boton
+              text={isRecording ? 'Parar Audio' : 'Grabar Audio'}
+              color='hsl(0,0%,50%)'
               onPress={isRecording ? stopRecording : startRecording}
             />
-            <Button title={'Play'} onPress={playRecording} />
           </View>
         )}
         {debt.audio && (
-          <View className='w-1/2'>
-            <Button title={'Play'} onPress={playRecording} />
+          <View className='w-1/2 flex-1 items-center justify-center'>
+            <Boton
+              text='Audio'
+              color='hsl(210,80%,50%)'
+              onPress={playRecording}
+            />
           </View>
         )}
       </View>
 
       <TextInput
-        className='text-white bg-neutral-700 mt-1 mb-4 p-2 w-full h-44 text-center rounded-xl'
+        className='bg-white mt-1 mb-4 p-2 w-full h-40 text-center rounded-xl border border-gray-200'
         style={{ textAlignVertical: 'top' }}
         multiline={true}
         placeholder='Descripcion'
-        placeholderTextColor='hsl(0,0%,70%)'
-        selectionColor={'white'}
+        placeholderTextColor={'hsl(0,0%,65%)'}
+        selectionColor={'black'}
         onChangeText={(text) => setDebt({ ...debt, description: text })}
-        value={debt.description}
+        value={debt.description !== 'No especificado' ? debt.description : ''}
         onTouchStart={() => {
           if (debt.description == 'No especificado') {
             setDebt({ ...debt, description: '' });
@@ -217,7 +238,7 @@ const Debtor = ({ navigation, route }) => {
       {!debt.image && (
         <Boton
           text='Subir imagen'
-          color='hsl(0,0%,30%)'
+          color='hsl(0,0%,50%)'
           onPress={() => {
             pickImage();
           }}
@@ -238,7 +259,7 @@ const Debtor = ({ navigation, route }) => {
         </View>
       )}
       <TouchableOpacity
-        className='bg-green-700 rounded-lg py-2 px-12 mt-3'
+        className='bg-green-500 rounded-lg py-2 px-12 mt-3'
         onPress={() => {
           updateDebt();
         }}
